@@ -193,9 +193,9 @@ class Layout extends React.Component {
                   </Switch>
                 </CSSTransition>
               </TransitionGroup>
-              <footer className={s.contentFooter}>
-                Light Blue React Dashboard - React admin template made by <a href="https://flatlogic.com" >Flatlogic</a>
-              </footer>
+              <footer className="auth-footer">
+                    {new Date().getFullYear()} &copy; Yuji Labs Private Limited. All rights reserved. <a href="https://www.yuji.co.in/" rel="noopener noreferrer" target="_blank">Yuji Labs</a>
+                </footer>
             </main>
           </Hammer>
         </div>

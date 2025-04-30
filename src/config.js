@@ -7,13 +7,16 @@ export default {
   redirectUrl,
   hostApi,
   portApi,
-  baseURLApi,
+  // baseURLApi,
   remote: "https://sing-generator-node.herokuapp.com",
-  isBackend: process.env.REACT_APP_BACKEND,
-  auth: {
-    email: 'admin@flatlogic.com',
-    password: 'password'
-  },
+  // isBackend: process.env.REACT_APP_BACKEND,
+  // auth: {
+  //   email: 'admin@flatlogic.com',
+  //   password: 'password'
+  // },
+  isBackend: true, // Make sure this is true to use the API
+  baseURLApi: 'http://106.51.158.49:7777/api/v1',
+  redirectUrl: window.location.origin,
   app: {
     colors: {
       dark: "#333964",
