@@ -241,50 +241,68 @@ export function loginUser(creds) {
           
           console.log('Attempting login with URL:', loginUrl);
           
-          axios.post(loginUrl, formData, {
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
-          }).then(res => {
-            console.log('Login response:', res.data);
-            
-            // Extract data from response - handle both formats
-            const responseData = res.data;
-            
-            // Make sure we have the access token
-            if (!responseData.access_token) {
-              console.error('Login response missing access_token:', responseData);
-              dispatch(authError('Invalid response from server. Missing access token.'));
-              return;
-            }
-            
-            // Create user info object with defaults in case fields are missing
-            const userInfo = {
-              username: responseData.username || creds.username,
-              role: responseData.role || 'user',
-              role_name: responseData.role_name || 'User'
-            };
-            
-            console.log('Extracted user info:', userInfo);
-            console.log('Access token:', responseData.access_token);
-            
-            dispatch(receiveToken(responseData.access_token, userInfo));
-            dispatch(doInit());
-          }).catch(err => {
-            console.error('Login error:', err.response?.data || err.message);
-            
-            // Format error message properly for display
-            let errorMessage = 'Login failed. Please check your credentials.';
-            if (err.response?.data?.detail) {
-              if (Array.isArray(err.response.data.detail)) {
-                errorMessage = err.response.data.detail.map(e => e.msg).join(', ');
-              } else {
-                errorMessage = err.response.data.detail;
-              }
-            }
-            
-            dispatch(authError(errorMessage));
-          });
+      // In your loginUser function in auth.js, update the axios.post section:
+
+axios.post(loginUrl, formData, {
+  headers: {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Accept': 'application/json'
+  }
+}).then(res => {
+  console.log('Login response:', res.data);
+  
+  // Check for HTML response (proxy misconfiguration)
+  if (typeof res.data === 'string' && res.data.includes('<!doctype html>')) {
+    console.error('Received HTML instead of JSON. Proxy misconfiguration detected.');
+    dispatch(authError('Server configuration error. Please contact support.'));
+    return;
+  }
+  
+  // Extract data from response - handle both formats
+  const responseData = res.data;
+  
+  // Make sure we have the access token
+  if (!responseData.access_token) {
+    console.error('Login response missing access_token:', responseData);
+    dispatch(authError('Invalid response from server. Missing access token.'));
+    return;
+  }
+  
+  // Create user info object with defaults in case fields are missing
+  const userInfo = {
+    username: responseData.username || creds.username,
+    role: responseData.role || 'user',
+    role_name: responseData.role_name || 'User'
+  };
+  
+  console.log('Extracted user info:', userInfo);
+  console.log('Access token:', responseData.access_token);
+  
+  dispatch(receiveToken(responseData.access_token, userInfo));
+  dispatch(doInit());
+}).catch(err => {
+  console.error('Login error response:', err.response?.data);
+  console.error('Login error message:', err.message);
+  
+  // Check if the error response is HTML
+  if (typeof err.response?.data === 'string' && err.response.data.includes('<!doctype html>')) {
+    console.error('Received HTML in error response. Proxy misconfiguration.');
+    dispatch(authError('Server configuration error. Please contact support.'));
+    return;
+  }
+  
+  // Format error message properly for display
+  let errorMessage = 'Login failed. Please check your credentials.';
+  if (err.response?.data?.detail) {
+    if (Array.isArray(err.response.data.detail)) {
+      errorMessage = err.response.data.detail.map(e => e.msg).join(', ');
+    } else {
+      errorMessage = err.response.data.detail;
+    }
+  }
+  
+  dispatch(authError(errorMessage));
+});
         } else {
           dispatch(authError('Username and password are required'));
         }
