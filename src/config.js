@@ -3,7 +3,7 @@ const hostApi = process.env.NODE_ENV === "development" ? "http://localhost" : "h
 const portApi = process.env.NODE_ENV === "development" ? 8080 : "";
 const baseURLApi = `${hostApi}${portApi ? `:${portApi}` : ``}/api`;
 const redirectUrl = process.env.NODE_ENV === "development" ? "http://localhost:5000/light-blue-react" : "https://demo.flatlogic.com/light-blue-react";
-
+    
 export default {
   // redirectUrl,
   hostApi,

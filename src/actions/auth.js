@@ -35,23 +35,65 @@ const getApiUrl = (endpoint) => {
   }
 };
 
-// Helper function to force a page reload to a specific URL
-const forceNavigation = (url) => {
-  console.log('Force navigating to:', url);
-  window.location.href = url;
-};
+// This function creates a minimal user object from token if the /me endpoint is not available
+function createUserFromToken(token) {
+  try {
+    const decoded = jwt.decode(token);
+    console.log("Creating user from token:", decoded);
+    
+    // Create a basic user object with information from the token
+    return {
+      id: decoded.sub || decoded.username || 'user',
+      username: decoded.sub || decoded.username || 'user',
+      email: decoded.email || 'user@example.com',
+      role: decoded.role || 'user',
+      role_name: decoded.role_name || 'User'
+    };
+  } catch (error) {
+    console.error("Error decoding token for user creation:", error);
+    // Return a default user
+    return {
+      id: 'user',
+      username: 'user',
+      email: 'user@example.com',
+      role: 'user',
+      role_name: 'User'
+    };
+  }
+}
 
 async function findMe() {
   if (config.isBackend) {
     try {
+      // Try to get user data from the /me endpoint
       const response = await axios.get(getApiUrl('auth/me'), {
         headers: {
           Authorization: `Bearer ${Cookies.get('access_token') || localStorage.getItem('token')}`
         }
       });
-      return response.data;
+      return response.data;    
     } catch (error) {
-      console.error('Error finding user:', error);
+      // If the endpoint is not found (404) or other error, create user from token
+      console.log("Error accessing /me endpoint. Using token data instead:", error.message);
+      const token = Cookies.get('access_token') || localStorage.getItem('token');
+      
+      // We already have user info in cookies or localStorage from login
+      const userInfoStr = Cookies.get('user_info') || localStorage.getItem('user');
+      if (userInfoStr) {
+        try {
+          const userInfo = JSON.parse(userInfoStr);
+          console.log("Using stored user info:", userInfo);
+          return userInfo;
+        } catch (parseError) {
+          console.error("Error parsing stored user info:", parseError);
+        }
+      }
+      
+      // If no stored user info, create from token
+      if (token) {
+        return createUserFromToken(token);
+      }
+      
       throw error;
     }
   } else {
@@ -81,8 +123,18 @@ export function doInit() {
       try {
         let token = Cookies.get('access_token') || localStorage.getItem('token');
         if (token) {
-          currentUser = await findMe();
+          // Try to get user data, with fallback to token data if endpoint fails
+          try {
+            currentUser = await findMe();
+          } catch (error) {
+            console.error('Could not retrieve user data, proceeding with limited info', error);
+            
+            // If we couldn't get user data but have a token, still consider authenticated
+            // with limited user info
+            currentUser = createUserFromToken(token);
+          }
         }
+        
         dispatch({
           type: AUTH_INIT_SUCCESS,
           payload: {
@@ -91,7 +143,11 @@ export function doInit() {
         });
       } catch (error) {
         console.error('Error initializing authentication:', error);
-        Errors.handle(error);
+        
+        // Only show error to user if it's not just a missing endpoint
+        if (error.response && error.response.status !== 404) {
+          Errors.handle(error);
+        }
 
         dispatch({
           type: AUTH_INIT_ERROR,
@@ -121,32 +177,16 @@ export function logoutUser() {
 
 export function receiveToken(token, userInfo = null) {
     return (dispatch) => {
-        let user;
-
-        if (config.isBackend) {
-          user = jwt.decode(token);
-          console.log("Decoded token:", user);
-        } else {
-          user = {
-            email: config.auth.email,
-            user: {
-              id: 'default_no_connection_id_444'
-            }
-          }
-        }
-
         // Store token in cookies and localStorage
+        console.log("Storing token:", token);
         Cookies.set('access_token', token, { expires: 7, path: '/' }); // Expires in 7 days, accessible from all paths
         localStorage.setItem('token', token);
-        console.log("Token stored in cookies and localStorage");
         
         // If user info is provided, store it in cookies
         if (userInfo) {
+          console.log("User info to store:", userInfo);
           Cookies.set('user_info', JSON.stringify(userInfo), { expires: 7, path: '/' });
           localStorage.setItem('user', JSON.stringify(userInfo));
-          console.log("User info stored:", userInfo);
-        } else {
-          localStorage.setItem('user', JSON.stringify(user));
         }
         
         axios.defaults.headers.common['Authorization'] = "Bearer " + token;
@@ -156,17 +196,17 @@ export function receiveToken(token, userInfo = null) {
           type: LOGIN_SUCCESS
         });
         
-        console.log("Login successful, redirecting to /app/main/visits");
+        console.log("Login successful, redirecting to /app/main/dashboard");
         
         // Try both methods for redirection to ensure it works
-        dispatch(push('/app/main/visits'));
+        dispatch(push('/app/main/dashboard'));
         
         // As a fallback, use direct navigation after a short delay
         setTimeout(() => {
           if (window.location.href.includes('/login')) {
             console.log("Fallback redirect triggered");
             const baseUrl = window.location.origin + window.location.pathname;
-            const hashUrl = baseUrl + '#/app/main/visits';
+            const hashUrl = baseUrl + '#/app/main/dashboard';
             window.location.href = hashUrl;
           }
         }, 500);
@@ -178,7 +218,7 @@ export function loginUser(creds) {
       if (!config.isBackend) {
         dispatch(receiveToken('token'));
         dispatch(doInit());
-        dispatch(push('/app'));
+        dispatch(push('/app/main/dashboard'));
       } else {
         dispatch({
           type: LOGIN_REQUEST,
@@ -207,16 +247,28 @@ export function loginUser(creds) {
             }
           }).then(res => {
             console.log('Login response:', res.data);
-            const { access_token, username, role, role_name } = res.data;
             
-            // Create user info object
+            // Extract data from response - handle both formats
+            const responseData = res.data;
+            
+            // Make sure we have the access token
+            if (!responseData.access_token) {
+              console.error('Login response missing access_token:', responseData);
+              dispatch(authError('Invalid response from server. Missing access token.'));
+              return;
+            }
+            
+            // Create user info object with defaults in case fields are missing
             const userInfo = {
-              username,
-              role,
-              role_name
+              username: responseData.username || creds.username,
+              role: responseData.role || 'user',
+              role_name: responseData.role_name || 'User'
             };
             
-            dispatch(receiveToken(access_token, userInfo));
+            console.log('Extracted user info:', userInfo);
+            console.log('Access token:', responseData.access_token);
+            
+            dispatch(receiveToken(responseData.access_token, userInfo));
             dispatch(doInit());
           }).catch(err => {
             console.error('Login error:', err.response?.data || err.message);

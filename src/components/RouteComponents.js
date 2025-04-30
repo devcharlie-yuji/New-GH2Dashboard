@@ -4,21 +4,30 @@ import { Redirect, Route } from 'react-router';
 import React from 'react';
 import Cookies from 'js-cookie';
 
-// Helper function to check authentication status (additional safety)
+// Helper function to check authentication status
 const checkAuthentication = () => {
   console.log("RouteComponents: Checking authentication status");
   
-  // First check if the Login component's method exists and use it
+  // First check if the Login component's isAuthenticated method exists
   if (typeof Login.isAuthenticated === 'function') {
-    const isAuthResult = Login.isAuthenticated();
-    console.log("RouteComponents: Login.isAuthenticated() result:", isAuthResult);
-    return isAuthResult;
+    try {
+      const isAuthResult = Login.isAuthenticated();
+      console.log("RouteComponents: Login.isAuthenticated() result:", isAuthResult);
+      
+      // If it returns a valid boolean, use it
+      if (typeof isAuthResult === 'boolean') {
+        return isAuthResult;
+      }
+    } catch (error) {
+      console.error("Error calling Login.isAuthenticated:", error);
+      // Continue to fallback
+    }
   }
   
-  // Fallback to a direct check if the component method doesn't exist or fails
+  // Fallback to a direct token check
   const token = Cookies.get('access_token') || localStorage.getItem('token');
-  console.log("RouteComponents: Token exists:", !!token);
-  return !!token;
+  console.log("RouteComponents: Fallback token check - token exists:", !!token);
+  return !!token; // Convert to boolean
 };
 
 export const AdminRoute = ({currentUser, dispatch, component, ...rest}) => {
@@ -27,13 +36,16 @@ export const AdminRoute = ({currentUser, dispatch, component, ...rest}) => {
   
   if (!isAuth || !currentUser || currentUser.role !== 'admin') {
     console.log("AdminRoute: Authentication or role check failed, redirecting to /app/main");
-    return (<Redirect to="/app/main"/>)
+    return (<Redirect to="/app/main"/>);
   } else if (currentUser && currentUser.role === 'admin') {
     console.log("AdminRoute: User is admin, allowing access");
     return (
       <Route {...rest} render={props => (React.createElement(component, props))}/>
     );
   }
+  
+  // Fallback - shouldn't reach here
+  return (<Redirect to="/app/main"/>);
 };
 
 export const UserRoute = ({dispatch, component, ...rest}) => {
@@ -42,8 +54,11 @@ export const UserRoute = ({dispatch, component, ...rest}) => {
   
   if (!isAuth) {
     console.log("UserRoute: Not authenticated, logging out and redirecting to /login");
-    dispatch(logoutUser());
-    return (<Redirect to="/login"/>)
+    // Prevent potential loops by checking if we're already on login page
+    if (!window.location.href.includes('/login')) {
+      dispatch(logoutUser());
+    }
+    return (<Redirect to="/login"/>);
   } else {
     console.log("UserRoute: User is authenticated, allowing access");
     return (
@@ -53,7 +68,8 @@ export const UserRoute = ({dispatch, component, ...rest}) => {
 };
 
 export const AuthRoute = ({dispatch, component, ...rest}) => {
-  const {from} = rest.location.state || {from: {pathname: '/app/main/visits'}};
+  // Changed default redirect target to dashboard
+  const {from} = rest.location.state || {from: {pathname: '/app/main/dashboard'}};
   const isAuth = checkAuthentication();
   console.log("AuthRoute - isAuth:", isAuth, "redirecting to:", from);
 
